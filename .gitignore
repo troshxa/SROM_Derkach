@@ -1,0 +1,19 @@
+# Артефакти збірки MSVC
+*.exe
+*.obj
+*.ilk
+*.pdb
+*.idb
+*.lib
+*.exp
+
+# Visual Studio
+.vs/
+*.user
+x64/
+Debug/
+Release/
+
+# VS Code: локальні налаштування, крім tasks.json
+.vscode/*
+!.vscode/tasks.json
