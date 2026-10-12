@@ -108,6 +108,7 @@ void LongMul(const BigNum& a, const BigNum& b, BigNum& c){
     BigNum tempC = {};
     BigNum temp = {};
     for(int i =0; i < WORDS; i++){
+        if (b.d[i] == 0) continue;
         LongMulOneDigit(a,b.d[i],temp);
         LongAdd(tempC, LongShiftDigitsToHigh(temp,i), tempC);
     }
@@ -119,19 +120,22 @@ void LongSquare(const BigNum& a, BigNum& b) {
     BigNum d = {};
     uint32_t carry;
     uint64_t temp = 0;
+    int n = (BitLength(a) + W - 1) / W;
 
-    for(int i =0; i <WORDS; i++){
+    for(int i =0; i <n; i++){
+        if (a.d[i] == 0) continue;
         carry=0;
-        for(int j = i + 1; i + j < WORDS; j++){
+        for(int j = i + 1; j < n && i + j < WORDS; j++){
             temp = (uint64_t)t.d[i + j] + (uint64_t)a.d[i] * a.d[j] + carry;
             t.d[i + j] = temp & MASK;
             carry = temp >> W;
         }
+        if (i + n < WORDS) t.d[i + n] = carry;
     }
 
     t = LongShiftBitsToHigh(t, 1);
 
-    for(int i = 0; 2 * i < WORDS; i++){
+    for(int i = 0; i < n && 2 * i < WORDS; i++){
         temp = (uint64_t)a.d[i] * a.d[i];
         d.d[2 * i] = temp & MASK;
         d.d[2 * i + 1] = temp >> W;
