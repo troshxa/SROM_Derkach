@@ -3,7 +3,7 @@
 #include <string>
 
 constexpr int W = 32;
-constexpr int BITS = 2048;
+constexpr int BITS = 4096; // модуль для Barrett до (BITS/2 - 32) біт, тобто 1024-бітний N вміщається
 constexpr int WORDS = BITS / W; //w=32
 constexpr uint64_t BASE = 1ULL << W;
 constexpr uint64_t MASK = BASE -1;

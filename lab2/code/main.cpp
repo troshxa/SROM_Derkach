@@ -8,28 +8,36 @@
 int main(){
     SetConsoleOutputCP(CP_UTF8);
 
-    BigNum A, B, C;
-    FromHex("0x202171731bd25f23cb5723b759bce0c00632334c4e9917fc14be434bf9db4b8653c39df5c563ea9c5e314de587a68261a407ad8512ba79993b280022e269ed74f37bfe8e74bafb86682da9034d76c812556e60745617ca65ab62ea46746ef58b96c852f237bf18c53e30f21eacdc84fd42ebaad5c247490cb7d55e879a12707c", A);
-    FromHex("0x1cfe4177fcb132f70cea7cd2b8fc2ab59995f89f6b84e3802e01883cd2aabac09263f8c6c86dff224b40c7f8dea2002edbccae774c33c947ef9761fd446cca6b24df6d2cdf45936f411c089d3039d86d028247ba8586960bdb4eea57d648576564883c85c735d1290c07872f9e1ff57688009b83071c2d3cd5918acf86fc0e84", B);
-    FromHex("0xb406f842b945341d32d8eceaddedd3046cf46347d09fca1f528785532eb8f16e5338791703dbc418dfa130c310bf6225627231bcd78ce64b3d4dcac838f16318", C);
+
+    BigNum A, B, N;
+    FromHex("0xcebe60efd949039fa8d8bac7d3e17db03f3e060531a329396ff9f9ab618600487e6efa1059fa75c882f01ab7d0564b58030dfdf6846db25d7e02dd90b8f9c58350c7f5878858c561e5d2a665f3f51da1f590c1150948b33dade79a8f3868c7849aa74e2c2741705cfae461bc360850a4bf77df2a6a8b0c50bd40fa4a2e73527e", A);
+    FromHex("0xd022e8f4fa56820673ae38cc8820c81662b720857e4fb620c7fcc6e3869e9435d24fe2b17f7a0769fcf5088580f8f7388ce84f8151cf034faeb7b9c9c5209c90ff0030191c71640436766c7d4a894774b05d2e9149278fa1c720bbf91d878e94db602352d033997bd73d8e81d5de0d3a3d43f4d0b4ac871c78a132618c1aca9e", B);
+    FromHex("0xdcb6124729054a97aee4a7edffc78672de847485fb6db32472c1b47f0741328ce0469fa2602985b97518b05112d9d65ff664f742b16dbb7c9e863514f0003e66d0b4bf8e9607ab378aa30de8dc842d83a63c88ce01ab036763286ec63a60f30b052d78b79761d2b37fafad485eeda1d852ae3f0635840ea8a1bef5d3bd9dd94d", N);
 
     printf("A = %s\n", ToHex(A).c_str());
     printf("B = %s\n", ToHex(B).c_str());
-    printf("C = %s\n\n", ToHex(C).c_str());
+    printf("N = %s\n\n", ToHex(N).c_str());
 
-    BigNum sum, diff, prod, q, r;
-    LongAdd(A, B, sum);
-    LongSub(A, B, diff);
-    LongMul(A, B, prod);
-    LongDivMod(A, C, q, r);
+    printf("gcd(A, B) = %s\n\n", ToHex(LongGcd(A, B)).c_str());
+    printf("lcm(A, B) = %s\n\n", ToHex(LongLcm(A, B)).c_str());
 
-    printf("A + B = %s\n\n", ToHex(sum).c_str());
-    printf("A - B = %s\n\n", ToHex(diff).c_str());
-    printf("A * B = %s\n\n", ToHex(prod).c_str());
-    printf("A / C = %s\n\n", ToHex(q).c_str());
-    printf("A mod C = %s\n\n", ToHex(r).c_str());
+    BigNum q;
+    LongDivMod(A, N, q, A);
+    LongDivMod(B, N, q, B);
 
-    // int failed = runTests();
-    // runBenchmarks();
-    return 0;
+    BigNum mu = BarrettMu(N);
+    BigNum sum, diff, prod, pw;
+    LongAddMod(A, B, N, sum);
+    LongSubMod(A, B, N, diff);          
+    LongMulMod(A, B, N, mu, prod);      
+    LongPowerMod(A, B, N, mu, pw);     
+
+    printf("A + B mod N = %s\n\n", ToHex(sum).c_str());
+    printf("A - B mod N = %s\n\n", ToHex(diff).c_str());
+    printf("A * B mod N = %s\n\n", ToHex(prod).c_str());
+    printf("A ^ B mod N = %s\n\n", ToHex(pw).c_str());
+
+    //int failed = runTests();
+    //runBenchmarks();
+   //return failed;
 }

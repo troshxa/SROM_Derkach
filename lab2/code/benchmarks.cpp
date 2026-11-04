@@ -6,7 +6,7 @@
 #include <string>
 #include <intrin.h>
 
-static std::mt19937 rng(20261012);
+static std::mt19937 rng(20261104);
 
 static BigNum RandomBigNum(int bits){
     BigNum x = {};
@@ -15,13 +15,40 @@ static BigNum RandomBigNum(int bits){
     return x;
 }
 
-const int POOL = 1024;
+static BigNum RandomExact(int bits){
+    BigNum x = RandomBigNum(bits);
+    x.d[(bits - 1) / W] |= 1u << ((bits - 1) % W);
+    return x;
+}
+
+static BigNum Rem(const BigNum& a, const BigNum& n){ BigNum q, r; LongDivMod(a, n, q, r); return r; }
+
+const int POOL = 256;
 const int P = POOL - 1;
 const int D = WORDS - 1;
-static BigNum A[POOL], B[POOL], Half[POOL], Small[POOL], E64[POOL];
-static BigNum A128[POOL], B128[POOL], A1024[POOL], B1024[POOL];
-static int K[POOL];
-static std::string HexStr[POOL];
+
+struct ModSet {
+    int bits;
+    BigNum n[POOL], mu[POOL];
+    BigNum a[POOL], b[POOL];          
+    BigNum x[POOL];                   
+    BigNum g1[POOL], g2[POOL];    
+
+    void Init(int bitsN){
+        bits = bitsN;
+        for (int i = 0; i < POOL; i++){
+            n[i] = RandomExact(bits);
+            mu[i] = BarrettMu(n[i]);
+            a[i] = Rem(RandomBigNum(bits), n[i]);
+            b[i] = Rem(RandomBigNum(bits), n[i]);
+            LongMul(a[i], b[i], x[i]);
+            g1[i] = RandomExact(bits);
+            g2[i] = RandomExact(bits);
+        }
+    }
+};
+
+static ModSet S256, S512, S992;
 
 static volatile uint32_t sink;
 
@@ -34,66 +61,75 @@ static void Bench(const char* name, int iterations, F op){
     uint64_t c1 = __rdtsc();
     auto end = std::chrono::steady_clock::now();
     double ns = std::chrono::duration<double, std::nano>(end - start).count() / iterations;
-    printf("| %-30s | %10d | %12.1f | %12.0f |\n", name, iterations, ns, (double)(c1 - c0) / iterations);
+    printf("| %-36s | %10d | %14.1f | %14.0f |\n", name, iterations, ns, (double)(c1 - c0) / iterations);
+}
+
+static void Header(const char* title){
+    printf("\n%s\n", title);
+    printf("| %-36s | %10s | %14s | %14s |\n", "Operation", "Iterations", "ns / op", "cycles / op");
+    printf("|--------------------------------------|------------|----------------|----------------|\n");
+}
+
+static void BenchSet(ModSet& S, int scale){
+    char name[64];
+    #define NAME(op) (snprintf(name, sizeof name, "%s (%d bit)", op, S.bits), name)
+
+    Bench(NAME("LongGcd"), 2000 * scale, [&](int i){
+        sink = sink ^ LongGcd(S.g1[i & P], S.g2[i & P]).d[0]; });
+    Bench(NAME("LongLcm"), 300 * scale, [&](int i){
+        sink = sink ^ LongLcm(S.g1[i & P], S.g2[i & P]).d[i & D]; });
+    Bench(NAME("LongAddMod"), 1000000, [&](int i){
+        BigNum c; LongAddMod(S.a[i & P], S.b[i & P], S.n[i & P], c); sink = sink ^ c.d[0]; });
+    Bench(NAME("LongSubMod"), 1000000, [&](int i){
+        BigNum c; LongSubMod(S.a[i & P], S.b[i & P], S.n[i & P], c); sink = sink ^ c.d[0]; });
+    Bench(NAME("BarrettMu"), 300 * scale, [&](int i){
+        sink = sink ^ BarrettMu(S.n[i & P]).d[0]; });
+    Bench(NAME("BarrettReduction"), 50000, [&](int i){
+        sink = sink ^ BarrettReduction(S.x[i & P], S.n[i & P], S.mu[i & P]).d[0]; });
+    Bench(NAME("x mod n via LongDivMod"), 300 * scale, [&](int i){
+        sink = sink ^ Rem(S.x[i & P], S.n[i & P]).d[0]; });
+    Bench(NAME("LongMulMod"), 50000, [&](int i){
+        BigNum c; LongMulMod(S.a[i & P], S.b[i & P], S.n[i & P], S.mu[i & P], c); sink = sink ^ c.d[0]; });
+    Bench(NAME("LongPowerMod"), 20 * scale, [&](int i){
+        BigNum c; LongPowerMod(S.a[i & P], S.b[i & P], S.n[i & P], S.mu[i & P], c); sink = sink ^ c.d[0]; });
+
+    #undef NAME
+}
+
+static void BenchSquare(ModSet& S){
+    char name[64];
+    #define NAME(op) (snprintf(name, sizeof name, "%s (%d bit)", op, S.bits), name)
+
+    Bench(NAME("LongMul(a, a)"), 100000, [&](int i){
+        BigNum c; LongMul(S.a[i & P], S.a[i & P], c); sink = sink ^ c.d[i & D]; });
+    Bench(NAME("LongSquare(a)"), 100000, [&](int i){
+        BigNum c; LongSquare(S.a[i & P], c); sink = sink ^ c.d[i & D]; });
+    Bench(NAME("LongMulMod(a, a)"), 50000, [&](int i){
+        BigNum c; LongMulMod(S.a[i & P], S.a[i & P], S.n[i & P], S.mu[i & P], c); sink = sink ^ c.d[0]; });
+    Bench(NAME("LongSquareMod(a)"), 50000, [&](int i){
+        BigNum c; LongSquareMod(S.a[i & P], S.n[i & P], S.mu[i & P], c); sink = sink ^ c.d[0]; });
+
+    #undef NAME
 }
 
 void runBenchmarks(){
-    printf("--- Running Benchmarks (%d bit, %d random numbers per operand) ---\n\n", BITS, POOL);
+    printf("--- Running Benchmarks (%d bit numbers, %d random moduli per size) ---\n", BITS, POOL);
 
-    for (int i = 0; i < POOL; i++){
-        A[i] = RandomBigNum(BITS);
-        B[i] = RandomBigNum(BITS);
-        Half[i] = RandomBigNum(BITS / 2);  Half[i].d[WORDS / 2 - 1] |= 1u << 31;
-        Small[i] = RandomBigNum(W);        Small[i].d[0] |= 1;
-        E64[i] = RandomBigNum(64);
-        K[i] = rng() % BITS;
-        HexStr[i] = ToHex(A[i]);
-        A128[i] = RandomBigNum(128);       B128[i] = RandomBigNum(128);
-        A1024[i] = RandomBigNum(1024);     B1024[i] = RandomBigNum(1024);
-    }
+    S256.Init(256);
+    S512.Init(512);
+    S992.Init((WORDS / 2 - 1) * W);  
 
-    printf("| %-30s | %10s | %12s | %12s |\n", "Operation", "Iterations", "ns / op", "cycles / op");
-    printf("|--------------------------------|------------|--------------|--------------|\n");
+    Header("Modular arithmetic");
+    BenchSet(S256, 8);
+    BenchSet(S512, 3);
+    BenchSet(S992, 1);
 
-    Bench("LongAdd", 1000000, [](int i){
-        BigNum c; LongAdd(A[i & P], B[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongSub", 1000000, [](int i){
-        BigNum c; LongSub(A[i & P], B[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongCmp", 1000000, [](int i){
-        sink = sink ^ (uint32_t)LongCmp(A[i & P], B[i & P]); });
-    Bench("BitLength", 1000000, [](int i){
-        sink = sink ^ (uint32_t)BitLength(A[i & P]); });
-    Bench("LongMulOneDigit", 1000000, [](int i){
-        BigNum c; LongMulOneDigit(A[i & P], B[i & P].d[0], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongShiftBitsToHigh", 1000000, [](int i){
-        sink = sink ^ LongShiftBitsToHigh(A[i & P], K[i & P]).d[i & D]; });
-    Bench("LongShiftBitsToLow", 1000000, [](int i){
-        sink = sink ^ LongShiftBitsToLow(A[i & P], K[i & P]).d[i & D]; });
-    Bench("LongMul (128 bit)", 200000, [](int i){
-        BigNum c; LongMul(A128[i & P], B128[i & P], c); sink = sink ^ c.d[i & 7]; });
-    Bench("LongMul (1024 bit)", 50000, [](int i){
-        BigNum c; LongMul(A1024[i & P], B1024[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongMul (2048 bit)", 50000, [](int i){
-        BigNum c; LongMul(A[i & P], B[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongSquare (128 bit)", 1000000, [](int i){
-        BigNum c; LongSquare(A128[i & P], c); sink = sink ^ c.d[i & 7]; });
-    Bench("LongSquare (1024 bit)", 200000, [](int i){
-        BigNum c; LongSquare(A1024[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongSquare (2048 bit)", 200000, [](int i){
-        BigNum c; LongSquare(A[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongDivMod (2048 / 1024 bit)", 2000, [](int i){
-        BigNum q, r; LongDivMod(A[i & P], Half[i & P], q, r); sink = sink ^ q.d[i & 31] ^ r.d[i & 31]; });
-    Bench("LongDivMod (2048 / 32 bit)", 1000, [](int i){
-        BigNum q, r; LongDivMod(A[i & P], Small[i & P], q, r); sink = sink ^ q.d[i & D] ^ r.d[0]; });
-    Bench("LongPower (exponent 64 bit)", 1000, [](int i){
-        BigNum c; LongPower(A[i & P], E64[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("LongPower (exponent 2048 bit)", 30, [](int i){
-        BigNum c; LongPower(A[i & P], B[i & P], c); sink = sink ^ c.d[i & D]; });
-    Bench("ToHex", 200000, [](int i){
-        std::string s = ToHex(A[i & P]); sink = sink ^ (uint32_t)s[i % s.size()]; });
-    Bench("FromHex", 200000, [](int i){
-        BigNum c; FromHex(HexStr[i & P], c); sink = sink ^ c.d[i & D]; });
+    Header("Variant 1: squaring vs multiplication");
+    BenchSquare(S256);
+    BenchSquare(S512);
+    BenchSquare(S992);
 
-    printf("\ncycles = TSC (__rdtsc), counts at the nominal CPU frequency\n");
+    printf("\nLongPowerMod: exponent has the same bit length as the modulus\n");
+    printf("cycles = TSC (__rdtsc), counts at the nominal CPU frequency\n");
     printf("------------------------------\n\n");
 }
