@@ -1,3 +1,4 @@
+#include <utility>
 #include "bignumarifmetic.h"
 
 uint32_t LongAdd(const BigNum& a, const BigNum& b, BigNum& c){
@@ -260,4 +261,107 @@ bool FromBin(const std::string& s, BigNum& a){
 
 std::string ToBin(const BigNum& a){
     return ToPow2String(a, 1);
+}
+
+
+//lab2
+
+void LongDiv(const BigNum& a, const BigNum& b, BigNum& q){
+    BigNum dummy;
+    LongDivMod(a,b,q,dummy);
+}
+
+BigNum LongGcd(const BigNum&a,const BigNum&b){
+    if(BitLength(a)==0) return b;
+    if(BitLength(b)==0) return a;
+    BigNum a_ = a;
+    BigNum b_ = b;
+    int k =0;
+    while(!(a_.d[0]&1)&&!(b_.d[0]&1)){
+        a_ = LongShiftBitsToLow(a_,1);
+        b_ = LongShiftBitsToLow(b_,1);
+        k++;
+    }
+    while (!(a_.d[0]&1))
+    {
+        a_ = LongShiftBitsToLow(a_,1);
+    }
+    while (BitLength(b_)!=0)
+    {
+        while (!(b_.d[0]&1)){
+            b_ = LongShiftBitsToLow(b_,1);
+        }
+        if(LongCmp(a_,b_)==1){
+            std::swap(a_,b_);
+        }
+        LongSub(b_,a_,b_);
+
+    }
+
+    return LongShiftBitsToHigh(a_,k);
+}
+
+BigNum LongLcm(const BigNum& a, const BigNum &b){
+    BigNum gcd = LongGcd(a,b);
+    BigNum temp;
+    LongDiv(a,gcd,temp);
+    LongMul(temp, b, temp);
+    return temp;
+}
+
+void LongAddMod(const BigNum& a, const BigNum& b, const BigNum& n,BigNum& c){
+    LongAdd(a,b,c);
+    if(LongCmp(c,n)>=0){
+        LongSub(c,n,c);
+    }
+}
+
+void LongSubMod(const BigNum& a, const BigNum& b, const BigNum& n,BigNum& c){
+    if(LongSub(a,b,c)!=0){
+        LongAdd(c,n,c);
+    }
+}
+
+BigNum BarrettMu(const BigNum & n){
+    int k = (BitLength(n) + W - 1) / W;            
+    BigNum beta2k = LongShiftDigitsToHigh(ToBigNum(1), 2 * k); 
+    BigNum mu;
+    LongDiv(beta2k, n, mu);                         
+    return mu;
+}
+
+BigNum BarrettReduction(const BigNum& a, const BigNum & n, const BigNum& mu){
+    int k = (BitLength(n) + W - 1) / W;  
+    BigNum q = LongShiftDigitsToLow(a,k-1);
+    LongMul(q,mu,q);
+    q = LongShiftDigitsToLow(q,k+1);
+    LongMul(q,n,q);
+    LongSub(a,q,q);
+    while(LongCmp(q,n)>=0){
+        LongSub(q,n,q);
+    }
+    return q;
+
+};
+
+void LongMulMod(const BigNum& a,const BigNum& b, const BigNum& n, const BigNum& mu ,BigNum& c){
+    LongMul(a,b,c);
+    c = BarrettReduction(c, n, mu);
+}
+
+void LongSquareMod(const BigNum& a, const BigNum& n, const BigNum& mu,BigNum &c){
+    LongSquare(a,c);
+    c = BarrettReduction(c,n,mu);
+}
+
+void LongPowerMod(const BigNum& a, const BigNum& b, const BigNum& n, const BigNum& mu, BigNum& c){
+    c = ToBigNum(1);
+    BigNum a_ = BarrettReduction(a,n,mu);
+    int m = BitLength(b);
+    for(int i = 0; i < m;i++){
+        if((b.d[i / W] >> (i % W)) & 1){
+            LongMulMod(c,a_,n,mu,c);
+        }
+        LongSquareMod(a_,n,mu,a_);
+    }
 }

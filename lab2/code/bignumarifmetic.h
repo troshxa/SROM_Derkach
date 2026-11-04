@@ -31,3 +31,20 @@ std::string ToHex(const BigNum& a);
 bool FromBin(const std::string& s, BigNum& a);  
 std::string ToBin(const BigNum& a);
 
+//lab2
+void LongDiv(const BigNum& a, const BigNum& b, BigNum& q);
+BigNum LongGcd(const BigNum&a,const BigNum&b);
+BigNum LongLcm(const BigNum& a, const BigNum &b);
+void LongAddMod(const BigNum& a, const BigNum& b, const BigNum& n,BigNum& c);
+void LongSubMod(const BigNum& a, const BigNum& b, const BigNum& n,BigNum& c);
+
+BigNum BarrettMu(const BigNum & n);
+BigNum BarrettReduction(const BigNum& a, const BigNum & n, const BigNum& mu);
+void LongMulMod(const BigNum& a,const BigNum& b, const BigNum& n, const BigNum& mu, BigNum& c);
+void LongSquareMod(const BigNum& a, const BigNum& n, const BigNum& mu,BigNum& c);
+void LongPowerMod(const BigNum& a, const BigNum& b, const BigNum& n, const BigNum& mu, BigNum& c);
+
+
+
+
+
